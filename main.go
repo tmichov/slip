@@ -2,10 +2,10 @@ package main
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 )
 
 type FileMap struct {
@@ -15,12 +15,12 @@ type FileMap struct {
 	swap bool
 }
 
-func getFile(file *string) (*FileMap, error) {
-	if *file == "" {
+func getFile(allArgs *Args) (*FileMap, error) {
+	if allArgs.file == "" {
 		return nil, fmt.Errorf("file is required")
 	}
 
-	fileContents, err := os.Open(*file)
+	fileContents, err := os.Open(allArgs.file)
 	if err != nil {
 		return nil, fmt.Errorf("file not found")
 	}
@@ -72,15 +72,71 @@ func (f *FileMap) edit() {
 	}
 }
 
-func main() {
-	//from := flag.String("from", "", "a string")	
-	//to := flag.String("to", "", "a string")	
-	file := flag.String("file", "", "a string")	
-	//swap := flag.Bool("swap", false, "a bool")	
-	
-	flag.Parse()
+type Options struct {
+	fromIndex int
+	toIndex int
+	swap bool
+	fromRegex string
+	toRegex string
+}
 
-	fileMap, err := getFile(file)	
+type Args struct {
+	from string
+	to string
+	swap bool
+	file string
+}
+
+func parseArgs() (*Args, error) {
+	var allArgs Args
+	args := os.Args[1:]
+
+	if len(args) < 2 {
+		return nil, fmt.Errorf("Usage: go run main.go filename.txt --from=1 --to=2 --swap")
+	}
+
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--from") {
+			allArgs.from = strings.Split(arg, "=")[1]
+		}
+
+		if strings.HasPrefix(arg, "--to") {
+			allArgs.to = strings.Split(arg, "=")[1]
+		}
+
+		if strings.HasPrefix(arg, "--swap") {
+			allArgs.swap = true
+		}
+
+		if !strings.HasPrefix(arg, "--") {
+			allArgs.file = arg
+		}
+
+		if strings.HasPrefix(arg, "--file") {
+			allArgs.file = strings.Split(arg, "=")[1]
+		}
+	}
+
+	return &allArgs, nil
+}
+
+func main() {
+
+	allArgs, err := parseArgs()
+
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	fmt.Println(allArgs.file)
+
+	fromIndex := parseInt(allArgs.from)
+	toIndex := parseInt(allArgs.to)
+
+	fmt.Println(fromIndex, toIndex)
+
+	fileMap, err := getFile(allArgs)
 
 	if err != nil {
 		log.Fatal(err)
@@ -89,7 +145,8 @@ func main() {
 
 	fileMap.edit()
 
-	fileContents, err := os.Create(*file)
+	fileContents, err := os.Create(allArgs.file)
+
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -103,3 +160,15 @@ func main() {
 
 	fmt.Println("File edited successfully")
 }
+
+func parseInt(input string) int {
+	var i int
+
+	fmt.Println(input)
+	if _, err := fmt.Sscanf(input, "%d", &i); err == nil {
+		return i
+	}
+
+	return -1
+}
+
