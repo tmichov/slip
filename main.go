@@ -12,6 +12,7 @@ type FileMap struct {
 	fromIndex int
 	toIndex int
 	lines []string
+	swap bool
 }
 
 func getFile(file *string) (*FileMap, error) {
@@ -28,6 +29,7 @@ func getFile(file *string) (*FileMap, error) {
 		fromIndex: -1,
 		toIndex: -1,
 		lines: []string{},
+		swap: true,
 	}
 
 	scanner := bufio.NewScanner(fileContents)
@@ -37,7 +39,7 @@ func getFile(file *string) (*FileMap, error) {
 		line := scanner.Text()
 		fileMap.lines = append(fileMap.lines, line)
 
-		if i == 7 {
+		if i == 6 {
 			fileMap.fromIndex = i
 		}
 
@@ -51,12 +53,23 @@ func getFile(file *string) (*FileMap, error) {
 	return &fileMap, nil
 }
 
-func (f *FileMap) swap() {
+func (f *FileMap) edit() {
 	if f.fromIndex == -1 || f.toIndex == -1 {
 		return
 	}
 
-	f.lines[f.fromIndex], f.lines[f.toIndex] = f.lines[f.toIndex], f.lines[f.fromIndex]
+	var temp string
+	if f.swap {
+		temp = f.lines[f.toIndex]
+	}
+
+	f.lines[f.toIndex] = f.lines[f.fromIndex]
+
+	if f.swap {
+		f.lines[f.fromIndex] = temp
+	} else {
+		f.lines = append(f.lines[:f.fromIndex], f.lines[f.fromIndex+1:]...)
+	}
 }
 
 func main() {
@@ -74,7 +87,19 @@ func main() {
 		return
 	}
 
-	fileMap.swap()
+	fileMap.edit()
 
-	fmt.Println(fileMap)
+	fileContents, err := os.Create(*file)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	for _, line := range fileMap.lines {
+		fileContents.WriteString(line + "\n")
+	}
+
+	fileContents.Close()
+
+	fmt.Println("File edited successfully")
 }
