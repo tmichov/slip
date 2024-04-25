@@ -4,10 +4,17 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 )
 
-func getFile(file *string) (*os.File, error) {
+type FileMap struct {
+	fromIndex int
+	toIndex int
+	lines []string
+}
+
+func getFile(file *string) (*FileMap, error) {
 	if *file == "" {
 		return nil, fmt.Errorf("file is required")
 	}
@@ -17,7 +24,39 @@ func getFile(file *string) (*os.File, error) {
 		return nil, fmt.Errorf("file not found")
 	}
 
-	return fileContents, nil
+	fileMap := FileMap{
+		fromIndex: -1,
+		toIndex: -1,
+		lines: []string{},
+	}
+
+	scanner := bufio.NewScanner(fileContents)
+
+	i := 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		fileMap.lines = append(fileMap.lines, line)
+
+		if i == 7 {
+			fileMap.fromIndex = i
+		}
+
+		if i == 3 {
+			fileMap.toIndex = i
+		}
+
+		i++
+	}
+
+	return &fileMap, nil
+}
+
+func (f *FileMap) swap() {
+	if f.fromIndex == -1 || f.toIndex == -1 {
+		return
+	}
+
+	f.lines[f.fromIndex], f.lines[f.toIndex] = f.lines[f.toIndex], f.lines[f.fromIndex]
 }
 
 func main() {
@@ -26,37 +65,16 @@ func main() {
 	file := flag.String("file", "", "a string")	
 	//swap := flag.Bool("swap", false, "a bool")	
 	
-	mapFlag := make(map[string]string)
-
 	flag.Parse()
 
-	fileContents, err := getFile(file)	
+	fileMap, err := getFile(file)	
 
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 		return
 	}
 
-	scanner := bufio.NewScanner(fileContents)
+	fileMap.swap()
 
-	i := 0
-	lines := []string{}
-	for scanner.Scan() {
-		line := scanner.Text()
-		lines = append(lines, line)
-
-		if i == 7 {
-			mapFlag["from"] = line
-		}
-
-		if i == 3 {
-			mapFlag["to"] = line
-		}
-
-		i++
-	}
-
-	//TODO: manipulate the lines with the flags
-	// in the future, use regex to find the line to manipulate
-	fmt.Println(lines)
+	fmt.Println(fileMap)
 }
