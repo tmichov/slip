@@ -5,86 +5,54 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 )
 
 type FileMap struct {
-	fromIndex int
-	toIndex int
 	lines []string
+}
+
+type Args struct {
 	swap bool
-}
-
-func getFile(allArgs *Args) (*FileMap, error) {
-	if allArgs.file == "" {
-		return nil, fmt.Errorf("file is required")
-	}
-
-	fileContents, err := os.Open(allArgs.file)
-	if err != nil {
-		return nil, fmt.Errorf("file not found")
-	}
-
-	fileMap := FileMap{
-		fromIndex: -1,
-		toIndex: -1,
-		lines: []string{},
-		swap: true,
-	}
-
-	scanner := bufio.NewScanner(fileContents)
-
-	i := 0
-	for scanner.Scan() {
-		line := scanner.Text()
-		fileMap.lines = append(fileMap.lines, line)
-
-		if i == 6 {
-			fileMap.fromIndex = i
-		}
-
-		if i == 3 {
-			fileMap.toIndex = i
-		}
-
-		i++
-	}
-
-	return &fileMap, nil
-}
-
-func (f *FileMap) edit() {
-	if f.fromIndex == -1 || f.toIndex == -1 {
-		return
-	}
-
-	var temp string
-	if f.swap {
-		temp = f.lines[f.toIndex]
-	}
-
-	f.lines[f.toIndex] = f.lines[f.fromIndex]
-
-	if f.swap {
-		f.lines[f.fromIndex] = temp
-	} else {
-		f.lines = append(f.lines[:f.fromIndex], f.lines[f.fromIndex+1:]...)
-	}
-}
-
-type Options struct {
+	file string
 	fromIndex int
 	toIndex int
-	swap bool
 	fromRegex string
 	toRegex string
 }
 
-type Args struct {
-	from string
-	to string
-	swap bool
-	file string
+func main() {
+	allArgs, err := parseArgs()
+
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	fileMap, err := getFile(allArgs)
+
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	fileMap.edit(allArgs)
+	
+	fileContents, err := os.Create(allArgs.file)
+
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	defer fileContents.Close()
+
+	for _, line := range fileMap.lines {
+		fileContents.WriteString(line + "\n")
+	}
+
+	fmt.Println("File edited successfully")
 }
 
 func parseArgs() (*Args, error) {
@@ -97,11 +65,19 @@ func parseArgs() (*Args, error) {
 
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "--from") {
-			allArgs.from = strings.Split(arg, "=")[1]
+			from := strings.Split(arg, "=")[1]
+			allArgs.fromIndex = parseInt(from)
+			if allArgs.fromIndex == -1 {
+				allArgs.fromRegex = from
+			}
 		}
 
 		if strings.HasPrefix(arg, "--to") {
-			allArgs.to = strings.Split(arg, "=")[1]
+			to := strings.Split(arg, "=")[1]
+			allArgs.toIndex = parseInt(to)
+			if allArgs.toIndex == -1 {
+				allArgs.toRegex = to 
+			}
 		}
 
 		if strings.HasPrefix(arg, "--swap") {
@@ -120,51 +96,86 @@ func parseArgs() (*Args, error) {
 	return &allArgs, nil
 }
 
-func main() {
+func getFile(allArgs *Args) (*FileMap, error) {
+	if allArgs.file == "" {
+		return nil, fmt.Errorf("file is required")
+	}
 
-	allArgs, err := parseArgs()
-
+	fileContents, err := os.Open(allArgs.file)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("file not found")
+	}
+
+	defer fileContents.Close()
+
+	lines := []string{}
+
+	scanner := bufio.NewScanner(fileContents)
+
+	i := 0
+	
+	var regFrom *regexp.Regexp
+	var regTo *regexp.Regexp
+
+	if allArgs.fromRegex != "" {
+		regFrom, err = regexp.Compile(allArgs.fromRegex)
+		if err != nil {
+			return nil, fmt.Errorf("Invalid regex")
+		}
+	}
+
+	if allArgs.toRegex != "" {
+		regTo, err = regexp.Compile(allArgs.toRegex)
+		if err != nil {
+			return nil, fmt.Errorf("Invalid regex")
+		}
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		lines = append(lines, line)
+		if allArgs.fromRegex != "" && allArgs.fromIndex == -1 {
+			if match := regFrom.Find([]byte(line)); match != nil {
+				allArgs.fromIndex = i
+			}
+		}
+
+		if allArgs.toRegex != "" && allArgs.toIndex == -1 {
+			if match := regTo.Find([]byte(line)); match != nil {
+				allArgs.toIndex = i
+			}
+		}
+
+		i++
+	}
+
+	return &FileMap{
+		lines: lines,
+	}, nil
+}
+
+func (f *FileMap) edit(o *Args) {
+	if o.fromIndex == -1 || o.toIndex == -1 {
 		return
 	}
 
-	fmt.Println(allArgs.file)
-
-	fromIndex := parseInt(allArgs.from)
-	toIndex := parseInt(allArgs.to)
-
-	fmt.Println(fromIndex, toIndex)
-
-	fileMap, err := getFile(allArgs)
-
-	if err != nil {
-		log.Fatal(err)
-		return
+	var temp string
+	if o.swap {
+		temp = f.lines[o.toIndex]
 	}
 
-	fileMap.edit()
+	f.lines[o.toIndex] = f.lines[o.fromIndex]
 
-	fileContents, err := os.Create(allArgs.file)
-
-	if err != nil {
-		log.Fatal(err)
-		return
+	if o.swap {
+		f.lines[o.fromIndex] = temp
+	} else {
+		f.lines = append(f.lines[:o.fromIndex], f.lines[o.fromIndex+1:]...)
 	}
-
-	for _, line := range fileMap.lines {
-		fileContents.WriteString(line + "\n")
-	}
-
-	fileContents.Close()
-
-	fmt.Println("File edited successfully")
 }
 
 func parseInt(input string) int {
 	var i int
 
-	fmt.Println(input)
 	if _, err := fmt.Sscanf(input, "%d", &i); err == nil {
 		return i
 	}
